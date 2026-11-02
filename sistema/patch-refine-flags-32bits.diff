@@ -1,0 +1,31 @@
+--- /tmp/gs-updates-page.c.orig	2026-11-02 12:53:52.866742114 +0000
++++ src/gs-updates-page.c	2026-11-02 12:53:53.048287489 +0000
+@@ -601,7 +601,7 @@
+ 					GAsyncResult *res,
+ 					gpointer user_data)
+ {
+-	guint64 refine_flags;
++	GsPluginRefineFlags refine_flags;  /* T2040: 32 bits, como a propriedade */
+ 	GsPluginLoader *plugin_loader = GS_PLUGIN_LOADER (source_object);
+ 	GsUpdatesPage *self = user_data;
+ 	GsPageHelper *helper;
+@@ -636,7 +636,7 @@
+ static void
+ gs_updates_page_load (GsUpdatesPage *self)
+ {
+-	guint64 refine_flags;
++	GsPluginRefineFlags refine_flags;  /* T2040: 32 bits, como a propriedade */
+ 	g_autoptr(GsAppQuery) query = NULL;
+ 	g_autoptr(GsPluginJob) plugin_job = NULL;
+ 
+--- /tmp/gs-cmd.c.orig	2026-11-02 12:53:52.939220014 +0000
++++ lib/gs-cmd.c	2026-11-02 12:53:53.158287489 +0000
+@@ -19,7 +19,7 @@
+ 
+ typedef struct {
+ 	GsPluginLoader	*plugin_loader;
+-	guint64		 refine_flags;
++	GsPluginRefineFlags refine_flags;  /* T2040: 32 bits, como a propriedade */
+ 	guint		 max_results;
+ 	gboolean	 interactive;
+ 	gboolean	 only_freely_licensed;

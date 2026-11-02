@@ -1,0 +1,221 @@
+#!/bin/sh
+# /init do initramfs do Positivo T2040 (SC9863A), boot no slot B.
+#
+# 1. Se o userdata tem o Debian (ext4 com systemd), entra nele por switch_root.
+#    Com 3 boots seguidos sem confirmacao (servico t2040-boot-ok), para no sistema minimo.
+# 2. Senao, fica no sistema minimo: log na tela, rede USB (RNDIS, 192.168.42.1),
+#    SSH (so chave publica) e o MODO INSTALACAO, que recebe a imagem do Debian
+#    do instalar.cmd pela porta 2040 e grava no userdata.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export LD_LIBRARY_PATH=/lib
+/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt /sbin /usr/bin /usr/sbin /lib /etc /root/.ssh /etc/dropbear
+/bin/busybox mount -t proc proc /proc
+/bin/busybox --install -s /bin 2>/dev/null
+mount -t sysfs sysfs /sys
+mount -t tmpfs tmpfs /tmp
+[ -c /dev/null ] || mknod /dev/null c 1 3
+[ -c /dev/console ] || mknod /dev/console c 5 1
+[ -c /dev/kmsg ] || mknod /dev/kmsg c 1 11
+[ -c /dev/urandom ] || mknod /dev/urandom c 1 9
+[ -c /dev/random ] || mknod /dev/random c 1 8
+mount -t configfs none /sys/kernel/config 2>/dev/null
+
+LOGF=/tmp/t2040.log
+: > $LOGF
+SDIO=/dev/block/platform/soc/soc:ap-ahb/20600000.sdio/by-name
+U=$SDIO/userdata
+PORTA_IMG=2040
+PORTA_RES=2041
+
+log() {
+	m="t2040: $*"
+	echo "$m" >> $LOGF
+	echo "$m" > /dev/kmsg 2>/dev/null
+	echo "$m" > /dev/console 2>/dev/null
+}
+
+# Nos by-name das particoes do eMMC (o Android cria pelo ueventd; aqui nao ha devtmpfs no initramfs).
+# O carregador de firmware do Wi-Fi/BT procura nomes sem sufixo de slot, por isso o _a tambem ganha o nome base.
+criar_by_name() {
+	mkdir -p "$SDIO"
+	for u in /sys/block/mmcblk0/mmcblk0p*/uevent; do
+		[ -f "$u" ] || continue
+		name=$(grep '^PARTNAME=' "$u" 2>/dev/null | cut -d= -f2)
+		[ -n "$name" ] || continue
+		n=$(cat "${u%/*}/dev" 2>/dev/null)
+		maj=${n%:*}; min=${n#*:}
+		[ -n "$maj" ] && [ -n "$min" ] || continue
+		[ -b "$SDIO/$name" ] || mknod "$SDIO/$name" b "$maj" "$min" 2>/dev/null
+		case "$name" in
+			*_a) [ -b "$SDIO/${name%_a}" ] || mknod "$SDIO/${name%_a}" b "$maj" "$min" 2>/dev/null ;;
+		esac
+	done
+}
+
+tentar_debian() {
+	mkdir -p /newroot
+	if ! mount -t ext4 -o rw,noatime $U /newroot 2>>$LOGF; then
+		log "userdata sem ext4: Debian nao instalado"
+		return 1
+	fi
+	if [ ! -x /newroot/lib/systemd/systemd ]; then
+		log "userdata sem /lib/systemd/systemd: Debian nao instalado"
+		umount /newroot
+		return 1
+	fi
+	C=/newroot/var/lib/t2040/tentativas
+	mkdir -p /newroot/var/lib/t2040
+	n=$(cat $C 2>/dev/null)
+	n=${n:-0}
+	if [ -e /newroot/var/lib/t2040/desligado ] || [ "$n" -ge 3 ]; then
+		log "Debian pulado (boots sem confirmacao=$n, ou /var/lib/t2040/desligado)"
+		umount /newroot
+		return 1
+	fi
+	echo $((n+1)) > $C
+	sync
+	log "entrando no Debian (tentativa $((n+1)) de 3)"
+	killall watchdog 2>/dev/null
+	umount /sys/kernel/config 2>/dev/null
+	umount /tmp 2>/dev/null
+	mount -t devtmpfs devtmpfs /newroot/dev
+	mount --move /proc /newroot/proc
+	mount --move /sys /newroot/sys
+	exec switch_root /newroot /lib/systemd/systemd
+}
+
+iniciar_tela() {
+	mkdir -p /dev/dri
+	i=0
+	while [ $i -lt 20 ] && [ ! -f /sys/class/drm/card0/dev ]; do i=$((i+1)); sleep 1; done
+	n=$(cat /sys/class/drm/card0/dev 2>/dev/null)
+	[ -n "$n" ] && mknod /dev/dri/card0 c "${n%:*}" "${n#*:}" 2>/dev/null
+	if [ -c /dev/dri/card0 ]; then
+		/bin/t2040_console $LOGF > /dev/null 2>&1 &
+	fi
+}
+
+# Gadget RNDIS por configfs. Os descritores os_desc fazem o Windows usar o driver RNDIS nativo sem instalar nada.
+iniciar_rndis() {
+	G=/sys/kernel/config/usb_gadget/t2040rndis
+	mkdir -p "$G" && cd "$G" || return 1
+	echo 0x1d6b > idVendor
+	echo 0x0104 > idProduct
+	echo 0x0100 > bcdDevice
+	echo 0x0200 > bcdUSB
+	mkdir -p strings/0x409 configs/c.1/strings/0x409 functions/rndis.usb0
+	echo "t2040linux0001" > strings/0x409/serialnumber
+	echo "T2040" > strings/0x409/manufacturer
+	echo "T2040 Linux RNDIS" > strings/0x409/product
+	echo "rndis" > configs/c.1/strings/0x409/configuration
+	echo 500 > configs/c.1/MaxPower
+	echo "02:20:40:00:00:01" > functions/rndis.usb0/dev_addr
+	echo "02:20:40:00:00:02" > functions/rndis.usb0/host_addr
+	echo 1 > os_desc/use
+	echo 0xcd > os_desc/b_vendor_code
+	echo "MSFT100" > os_desc/qw_sign
+	if [ -d functions/rndis.usb0/os_desc/interface.rndis ]; then
+		echo "RNDIS" > functions/rndis.usb0/os_desc/interface.rndis/compatible_id
+		echo "5162001" > functions/rndis.usb0/os_desc/interface.rndis/sub_compatible_id
+	fi
+	# links com caminho absoluto; o do os_desc antes do bind do UDC
+	[ -L "$G/configs/c.1/rndis.usb0" ] || ln -s "$G/functions/rndis.usb0" "$G/configs/c.1/rndis.usb0"
+	[ -L "$G/os_desc/c.1" ] || ln -s "$G/configs/c.1" "$G/os_desc/c.1"
+	cd /
+	UDC=$(ls /sys/class/udc 2>/dev/null | head -n 1)
+	[ -n "$UDC" ] && echo "$UDC" > "$G/UDC" || { log "USB: sem UDC"; return 1; }
+	i=0
+	while [ $i -lt 10 ] && [ ! -d /sys/class/net/usb0 ]; do i=$((i+1)); sleep 1; done
+	[ -d /sys/class/net/usb0 ] || { log "USB: interface usb0 nao apareceu"; return 1; }
+	ifconfig usb0 192.168.42.1 netmask 255.255.255.0 up
+	cat > /etc/udhcpd.conf << 'EOF'
+start 192.168.42.2
+end 192.168.42.10
+interface usb0
+lease_file /tmp/udhcpd.leases
+option subnet 255.255.255.0
+option lease 3600
+EOF
+	: > /tmp/udhcpd.leases
+	udhcpd -f /etc/udhcpd.conf > /dev/null 2>&1 &
+	log "rede USB pronta: tablet em 192.168.42.1"
+}
+
+# SSH so por chave. A chave de host e gerada em memoria a cada boot (-R).
+# Chaves autorizadas: as do Debian instalado, se houver.
+iniciar_ssh() {
+	echo "root:x:0:0:root:/root:/bin/sh" > /etc/passwd
+	echo "root:x:0:" > /etc/group
+	if mount -t ext4 -o ro $U /mnt 2>/dev/null; then
+		cat /mnt/root/.ssh/authorized_keys /mnt/home/t2040/.ssh/authorized_keys > /root/.ssh/authorized_keys 2>/dev/null
+		umount /mnt
+	fi
+	chmod 700 /root/.ssh
+	chmod 600 /root/.ssh/authorized_keys 2>/dev/null
+	dropbear -R -s -p 22 > /dev/null 2>&1 && log "SSH ativo (so chave publica)"
+}
+
+# Restaura as tentativas do slot B no misc: este boot chegou ao fim do init.
+confirmar_slot_b() {
+	M=$SDIO/misc
+	if [ "$(dd if=$M bs=1 skip=2052 count=4 2>/dev/null)" = "BCAB" ]; then
+		dd if=/etc/misc-padrao-b.bin of=$M bs=32 seek=64 count=1 conv=notrunc 2>/dev/null
+		sync
+	fi
+}
+
+# Recebe a imagem ext4 do Debian compactada em xz pela porta 2040 e grava no userdata.
+# O xz confere a integridade (CRC); o resultado fica na porta 2041 para o instalar.cmd ler.
+modo_instalacao() {
+	mkfifo /tmp/soma
+	while true; do
+		log "MODO INSTALACAO: aguardando a imagem do Debian pela USB (rode o instalar.cmd no PC)"
+		sha256sum < /tmp/soma > /tmp/soma.txt &
+		SP=$!
+		set -o pipefail
+		if nc -l -s 192.168.42.1 -p $PORTA_IMG < /dev/null | unxz -c 2>>$LOGF | tee /tmp/soma |
+		   dd of=$U bs=4M iflag=fullblock 2>/tmp/dd.log; then st=0; else st=1; fi
+		set +o pipefail
+		wait $SP
+		sync
+		soma=$(cut -d' ' -f1 /tmp/soma.txt)
+		bytes=$(grep -o '^[0-9]* bytes' /tmp/dd.log | cut -d' ' -f1)
+		# conexao vazia (o PC so testou se a porta esta aberta): nada foi gravado, volta a esperar
+		[ "${bytes:-0}" = 0 ] && continue
+		if [ "$st" = 0 ] && mount -t ext4 -o rw $U /mnt 2>>$LOGF && [ -x /mnt/lib/systemd/systemd ]; then
+			# identidade propria deste aparelho
+			cat /proc/sys/kernel/random/uuid | tr -d '-' > /mnt/etc/machine-id
+			mkdir -p /mnt/var/lib/t2040
+			echo 0 > /mnt/var/lib/t2040/tentativas
+			touch /mnt/var/lib/t2040/primeiro-boot
+			umount /mnt
+			sync
+			echo "OK $soma $bytes" > /tmp/resultado
+			log "imagem gravada e conferida ($bytes bytes). Reiniciando no Debian..."
+			nc -l -s 192.168.42.1 -p $PORTA_RES -w 60 < /tmp/resultado > /dev/null 2>&1 &
+			NP=$!
+			i=0
+			while [ $i -lt 60 ] && kill -0 $NP 2>/dev/null; do i=$((i+1)); sleep 1; done
+			reboot -f
+		fi
+		umount /mnt 2>/dev/null
+		echo "ERRO $soma ${bytes:-0}" > /tmp/resultado
+		log "ERRO ao receber ou gravar a imagem. Rode o instalar.cmd de novo."
+		nc -l -s 192.168.42.1 -p $PORTA_RES -w 60 < /tmp/resultado > /dev/null 2>&1
+		sleep 3
+	done
+}
+
+# Watchdog de hardware: reinicia se o kernel travar. No Debian, quem cuida e o systemd.
+mknod /dev/watchdog c 10 130 2>/dev/null
+watchdog -t 3 -T 20 /dev/watchdog 2>/dev/null
+
+log "initramfs do T2040, kernel $(uname -r) $(uname -v)"
+criar_by_name
+tentar_debian
+
+iniciar_tela
+iniciar_rndis
+iniciar_ssh
+confirmar_slot_b
+modo_instalacao
