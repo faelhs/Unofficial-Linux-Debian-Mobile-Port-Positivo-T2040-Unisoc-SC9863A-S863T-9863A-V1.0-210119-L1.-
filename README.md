@@ -9,16 +9,24 @@ um patch próprio. Ele é compatível com os módulos originais do tablet (Wi-Fi
 > **Atenção:** a instalação **apaga todos os dados** do tablet e desbloqueia o bootloader.
 > Use por sua conta e risco. O Android continua no slot A como reserva.
 
-## Estado
+## Estado (v0.2)
 
-| Funciona | Não funciona |
+| Recurso | Situação |
 |---|---|
-| Tela, toque, Phosh com GPU PowerVR | Modem 4G (chamadas, SMS, dados móveis) |
-| Wi-Fi, Bluetooth, rede e SSH pela USB | GPS |
-| Áudio (alto-falante e microfone), câmeras traseira e frontal | Suspensão (desativada: trava o tablet) |
-| Bateria carregando, acelerômetro e giroscópio | Sensor de luz e de proximidade (o tablet não tem) |
+| Tela, toque, Phosh com GPU PowerVR | funciona |
+| Wi-Fi, rede e SSH pela USB | funciona |
+| Bluetooth, inclusive fone e caixa de som (A2DP) | funciona; o áudio passa sozinho para o aparelho conectado |
+| Áudio (alto-falante, fone e microfone), câmeras traseira e frontal | funciona |
+| Bateria carregando, acelerômetro, giroscópio e rotação da tela | funciona |
+| Suspensão | funciona: na bateria, dorme após 15 min sem uso e acorda pelo botão; na tomada ou com o cabo USB de dados ligado ao PC, não dorme |
+| OTG (pendrive, disco) | funciona; ligue o adaptador com o tablet já ligado |
+| GPS | experimental: o NMEA chega e vai para o GeoClue, mas a posição com céu aberto ainda não foi testada |
+| Rádio FM | não funciona: o sintonizador responde, mas ainda não há áudio nem app |
+| Modem 4G (chamadas, SMS, dados móveis) | não funciona |
+| Sensor de luz e de proximidade, vibração, LED de notificação, leitor de digital | o tablet não tem |
 
-A rotação automática da tela está configurada, mas só foi testada por simulação.
+A suspensão pode ser desligada com `sudo t2040-suspensao off` (e religada com `on`).
+Para usar o GPS, ligue a localização em **Configurações > Privacidade > Localização**.
 
 ## Instalar
 
@@ -44,7 +52,7 @@ O `instalar.cmd` baixa sozinho o resto:
 |---|---|
 | adb e fastboot (Android SDK Platform-Tools) | <https://developer.android.com/tools/releases/platform-tools> |
 | unisoc-unlock (desbloqueio do bootloader) | <https://github.com/patrislav1/unisoc-unlock> |
-| Boot do Linux e sistema Debian | [release v0.1-experimental](https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/tag/v0.1-experimental) |
+| Boot do Linux e sistema Debian | [release v0.2-experimental](https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/tag/v0.2-experimental) |
 
 ### Passo a passo
 
@@ -73,7 +81,9 @@ O primeiro boot leva uns 2 minutos, porque o sistema de arquivos cresce para ocu
 
 ### Reinstalar ou voltar ao Android
 
-- **Reinstalar o Debian:** no tablet, abra o Console e rode `sudo t2040-reinstalar`. Depois rode o `instalar.cmd`.
+- **Reinstalar o Debian ou passar da v0.1 para a v0.2:** no tablet, abra o Console e rode `sudo t2040-reinstalar`.
+  Depois rode o `instalar.cmd`. Isso apaga os dados do Debian. Se a pasta `arquivos` tiver a imagem da v0.1, o
+  instalador baixa a da v0.2 no lugar.
 - **Entrar no fastboot pelo Debian:** `sudo systemctl reboot --reboot-argument=bootloader`.
 - **Voltar ao Android:** no fastboot, rode o comando abaixo. O Android vai precisar apagar os dados
   na primeira vez, porque o `userdata` está em ext4.
@@ -116,7 +126,7 @@ sudo apt install build-essential bc bison flex libssl-dev libelf-dev python3 pyt
 | Fonte do kernel Realme C21Y, commit `3e85eafa` | <https://github.com/realme-kernel-opensource/realme_C21Y-AndroidR-kernel-source> |
 | Clang 11.0.2 `r383902b` do Android 11 (o mesmo do kernel original) | <https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+/refs/tags/android-11.0.0_r1/clang-r383902b> |
 | Chave de referência AVB da Unisoc (`rsa4096_boot.pem`), baixada pelo `montar-boot.py` | <https://github.com/TomKing062/vendor_sprd_proprietories-source_packimage> |
-| Boot de base (`t2040-boot.img`) | [release v0.1-experimental](https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/tag/v0.1-experimental) |
+| Boot de base (`t2040-boot.img`) | [release v0.2-experimental](https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/tag/v0.2-experimental) |
 
 ### Passos
 
@@ -177,12 +187,14 @@ kernel/t2040-kernel.patch    diferenças em relação à fonte da Realme
 kernel/config-t2040          configuração do kernel
 kernel/conferir-abi.py       conferência dos CRCs com os módulos do tablet
 kernel/crcs-modulos-vendor.txt
+modulos/t2040_otg/           módulo que liga a detecção do OTG (compilar.sh)
 sistema/                     patches do GNOME Software usados na imagem do sistema
 ```
 
 ## Licenças e créditos
 
-- Scripts deste repositório: MIT (`LICENSE`). O `t2040-kernel.patch` é derivado do kernel Linux: GPL-2.0.
+- Scripts deste repositório: MIT (`LICENSE`). O `t2040-kernel.patch` e o módulo `modulos/t2040_otg` são
+  derivados do kernel Linux: GPL-2.0.
 - A imagem do sistema na release contém pacotes do Debian, cada um com a sua licença, e arquivos
   proprietários do próprio tablet: módulos e firmware da partição `socko`, bibliotecas da GPU PowerVR
   e do Android do `vendor`. Eles são necessários para o hardware funcionar.

@@ -8,15 +8,15 @@ $ProgressPreference = 'SilentlyContinue'
 $Ferr = $PSScriptRoot
 $Raiz = Split-Path $Ferr -Parent
 $Dados = Join-Path $Raiz 'arquivos'
-$Release = 'https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/download/v0.1-experimental'
+$Release = 'https://github.com/faelhs/Unofficial-Linux-Debian-Mobile-Port-Positivo-T2040-Unisoc-SC9863A-S863T-9863A-V1.0-210119-L1.-/releases/download/v0.2-experimental'
 $UnlockZip = 'https://github.com/patrislav1/unisoc-unlock/archive/a4eaa5e3258c4a15b794b60647ff8c371eac4275.zip'
 $PlatformTools = 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip'
 
 $BootImg = 't2040-boot.sparse.img'
 $BootSha = '43273cc19ee461c4b5be7ef2d418ed9ea151bc106617a5cb16be2ce25ac48633'
 $RootImg = 't2040-debian13-phosh.img.xz'
-$RootSha = '021803df620a4368a6febf270d6eb32a58ad3575c2cad0292f2cf883b6829150'
-$RootRawSha = 'f97de2324df0756a1ef387d8394be832b9884d29d12002c25c12f94f28751f7b'
+$RootSha = '9e6d7e1c839a45737eac41ddb604da2abd0daeeb2f10bf151c4bab440cf1b7b1'
+$RootRawSha = '0e54311416fb1098dbff4f45c915b9754323af887444e7971c23c0d3087037bf'
 
 $IpTablet = '192.168.42.1'
 $PortaImg = 2040
@@ -103,6 +103,11 @@ if ($r.Codigo -ne 0) {
 $Boot = Join-Path $Dados $BootImg
 $Root = Join-Path $Dados $RootImg
 foreach ($par in @(@($Boot, $BootSha), @($Root, $RootSha))) {
+    # Arquivo de outra versao (ex.: v0.1 na pasta arquivos): apaga e baixa o desta versao.
+    if ((Test-Path $par[0]) -and ((Get-FileHash -Algorithm SHA256 $par[0]).Hash.ToLower() -ne $par[1])) {
+        Aviso "$(Split-Path $par[0] -Leaf) e de outra versao; baixando de novo."
+        Remove-Item $par[0]
+    }
     if (-not (Test-Path $par[0])) { Baixar "$Release/$(Split-Path $par[0] -Leaf)" $par[0] }
     Conferir $par[0] $par[1]
 }
