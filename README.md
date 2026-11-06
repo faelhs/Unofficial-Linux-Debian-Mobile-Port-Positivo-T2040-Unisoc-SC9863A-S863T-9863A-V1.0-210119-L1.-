@@ -28,6 +28,29 @@ um patch próprio. Ele é compatível com os módulos originais do tablet (Wi-Fi
 A suspensão pode ser desligada com `sudo t2040-suspensao off` (e religada com `on`).
 Para usar o GPS, ligue a localização em **Configurações > Privacidade > Localização**.
 
+## Imagens
+
+Capturas de tela tiradas no próprio tablet (800×1280, com `grim`):
+
+| Tela de bloqueio | Aplicativos | Configurações > Sobre |
+|---|---|---|
+| ![Tela de bloqueio do Phosh](docs/imagens/tela-bloqueio.png) | ![Grade de aplicativos do Phosh](docs/imagens/tela-inicial.png) | ![Configurações, página Sobre: Debian GNU/Linux 13, ARMv8 × 8, 1,8 GiB](docs/imagens/configuracoes-sobre.png) |
+
+| Calculadora com o teclado na tela | Console com o htop |
+|---|---|
+| ![Calculadora do GNOME e teclado virtual](docs/imagens/calculadora.png) | ![Console rodando o htop com os 8 núcleos](docs/imagens/console-htop.png) |
+
+Fotos das câmeras, tiradas no Debian:
+
+![Câmera traseira: à esquerda sem a correção de cor, à direita com a matriz de cor e a curva gama do fabricante](docs/imagens/camera-traseira-antes-depois.jpg)
+
+*Câmera traseira (GC5035): à esquerda, sem a correção de cor; à direita, com a matriz de cor e a curva gama
+do fabricante.*
+
+<img src="docs/imagens/camera-foto-ambiente.jpg" alt="Foto de uma parede tirada pela câmera do tablet" width="360">
+
+*Foto tirada pela câmera do tablet no Debian.*
+
 ## Instalar
 
 ### Requisitos
@@ -189,6 +212,7 @@ kernel/conferir-abi.py       conferência dos CRCs com os módulos do tablet
 kernel/crcs-modulos-vendor.txt
 modulos/t2040_otg/           módulo que liga a detecção do OTG (compilar.sh)
 sistema/                     patches do GNOME Software usados na imagem do sistema
+docs/imagens/                capturas de tela e fotos das câmeras
 ```
 
 ## Licenças e créditos
