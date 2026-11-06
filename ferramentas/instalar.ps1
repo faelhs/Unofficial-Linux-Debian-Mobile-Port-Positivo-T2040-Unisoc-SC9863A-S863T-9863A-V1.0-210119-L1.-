@@ -15,8 +15,8 @@ $PlatformTools = 'https://dl.google.com/android/repository/platform-tools-latest
 $BootImg = 't2040-boot.sparse.img'
 $BootSha = '43273cc19ee461c4b5be7ef2d418ed9ea151bc106617a5cb16be2ce25ac48633'
 $RootImg = 't2040-debian13-phosh.img.xz'
-$RootSha = '9e6d7e1c839a45737eac41ddb604da2abd0daeeb2f10bf151c4bab440cf1b7b1'
-$RootRawSha = '0e54311416fb1098dbff4f45c915b9754323af887444e7971c23c0d3087037bf'
+$RootSha = 'cdff0e89fe1aab1e939e9bd3b649cf8d8a8b180547e08586f41d6464725529a8'
+$RootRawSha = '09b7b28eddc4e2a53472294fc1d0b3319266d65b1d4641666782c206d8dbde75'
 
 $IpTablet = '192.168.42.1'
 $PortaImg = 2040
